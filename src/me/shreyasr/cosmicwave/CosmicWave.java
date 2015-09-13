@@ -7,9 +7,12 @@ import hydra.ajm.FSKModem;
 import processing.core.PApplet;
 
 import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 
 public class CosmicWave extends PApplet {
 
+    ModemQueue modemOutputQueue;
     FSKModem modem;
     AudioInput in;
 
@@ -17,66 +20,74 @@ public class CosmicWave extends PApplet {
         try {
             Minim minim = new Minim(new JSMinim(new Object()));
             float highFreq = 9000;
-            float lowFreq = 2500;
+            float lowFreq = 3500;
             float bitRate = 400;
             modem = new FSKModem(minim, highFreq, lowFreq, bitRate, highFreq,
                     lowFreq, bitRate);
             in = modem.ain;
+            modemOutputQueue = new ModemQueue(modem);
+            modemOutputQueue.add("Welcome to zombocom!!!!!");
+            new Thread(modemOutputQueue).start();
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    int count = 1;
     ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 
     @Override public void draw() {
-        try {
+        if (modem.available() >= 8) {
             byte[] input = modem.readBytes();
-            if (input != null) {
+            if (Arrays.equals(input, Constants.CLOSING)) {
+                System.out.println("\nDONE");
+                System.out.println(new String(buffer.toByteArray(), StandardCharsets.US_ASCII));
+                buffer.reset();
+            } else {
                 for (byte b : input) {
-                    if (b == '!' && buffer.size() > 0) {
-                        System.out.println("\nDONE");
-                        System.out.println(new String(buffer.toByteArray(), "ASCII"));
-                        buffer.reset();
-                    } else {
-                        if (!Character.isLetterOrDigit(b)) {
-                            b = ' ';
-                        }
-                        buffer.write(b);
-                        System.out.println(new String(buffer.toByteArray(), "ASCII") + " | ");
+                    if (b<32 || b>127) {
+                        b = '-';
                     }
+                    buffer.write(b);
                 }
             }
-            if (count++%100==0) {
-                modem.write("Welcome ");
-                modem.write(new byte[]{ 0,0,0,0 });
-                modem.write("to zombo");
-                modem.write(new byte[]{ 0,0,0,0 });
-                modem.write("com!!!!!");
-//                modem.write("Welcome to Zombocom!");
-//                modem.write("Welcome to Zombocom!");
-//                modem.write("Welcome to Zombocom!");
-//                modem.write("Welcome to Zombocom!");
-//                modem.write(Constants.TEST_DATA);
-//                modem.write(Constants.TEST_DATA);
-//                modem.write(Constants.TEST_DATA);
-//                modem.write(Constants.TEST_DATA);
+            System.out.println(new String(buffer.toByteArray(), StandardCharsets.US_ASCII));
+        }
+    }
+
+    class ModemQueue implements Runnable {
+
+        Queue<byte[]> chunks = new LinkedList<>();
+        private FSKModem modem;
+
+        public ModemQueue(FSKModem modem) {
+            this.modem = modem;
+        }
+
+        public void add(String message) {
+            byte[] bytes = message.getBytes(StandardCharsets.US_ASCII);
+            for (int i=0;i<bytes.length/8;i++) {
+                add(Arrays.copyOfRange(bytes, i * 8, i * 8 + 8));
             }
+            add(Constants.CLOSING);
+        }
 
-            background(0);
-            stroke(255);
+        private void add(byte[] chunk) {
+            chunks.offer(chunk);
+        }
 
-            // draw the waveforms so we can see what we are monitoring
-            for(int i = 0; i < in.bufferSize() - 1; i++) {
-                line(i, 50 + in.left.get(i)*50, i+1, 50 + in.left.get(i+1)*50);
-                line(i, 150 + in.right.get(i)*50, i+1, 150 + in.right.get(i+1)*50);
+        @Override
+        public void run() {
+            try {
+                Thread.sleep(1000);
+                while (true) {
+                    while (chunks.peek() == null) ;
+                    byte[] arr = chunks.poll();
+                    modem.write(arr);
+                    Thread.sleep(arr.length * 8 / 400 * 1000 + 500);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-
-            String monitoringState = in.isMonitoring() ? "enabled" : "disabled";
-            text("Input monitoring is currently " + monitoringState + ".", 5, 15);
-        } catch (Exception e) {
-            e.printStackTrace();
         }
     }
 }

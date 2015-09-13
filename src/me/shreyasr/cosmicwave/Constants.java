@@ -1,6 +1,10 @@
 package me.shreyasr.cosmicwave;
 
+import java.nio.charset.StandardCharsets;
+
 public class Constants {
+
+    public static final byte[] CLOSING = "xxxxxxxx".getBytes(StandardCharsets.US_ASCII);
 
     public static final String TEST_DATA = "Call me Ishmael. Some years ago—never" +
             " mind how long precisely—having little or no money in my purse," +
